@@ -1,364 +1,243 @@
 import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import * as cheerio from 'cheerio';
+import { XMLParser } from 'fast-xml-parser';
+import * as config from '../../config.js';
 
-// --- SETUP CONFIG ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+// ==========================================
+// PENGATURAN HEADERS & COOKIE INSTAGRAM
+// ==========================================
+const getHeaders = () => ({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+    'cache-control': 'max-age=0',
+    'dpr': '2',
+    'viewport-width': '980',
+    'sec-ch-ua': '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+    'sec-ch-ua-mobile': '?1',
+    'sec-ch-ua-platform': '"Android"',
+    'sec-ch-ua-platform-version': '"15.0.0"',
+    'sec-ch-ua-model': '"25028RN03A"',
+    'sec-ch-ua-full-version-list': '"Chromium";v="136.0.7103.125", "Google Chrome";v="136.0.7103.125", "Not.A/Brand";v="99.0.0.0"',
+    'sec-ch-prefers-color-scheme': 'light',
+    'dnt': '1',
+    'upgrade-insecure-requests': '1',
+    'sec-fetch-site': 'same-origin',
+    'sec-fetch-mode': 'navigate',
+    'sec-fetch-user': '?1',
+    'sec-fetch-dest': 'document',
+    'accept-language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7',
+    'priority': 'u=0, i',
+    'Cookie': 'Csrftoken=9Zd2Avg49oL1AFIeDQclB4; datr=6_fHaQ9sUS6XshEiGpHtYEBP; ig_did=F960353F-0D4E-4529-A26E-09F26A27F5FC; ps_l=1; ps_n=1; dpr=1.7000000476837158; mid=acf36wABAAHPJbh3hGsBundCVk9Q; wd=424x851; ds_user_id=38741244537; sessionid=38741244537%3AINdhjrpQUCPHsN%3A7%3AAYjd1BBLVynne0IrE66MDZMyXIuR-UCS9_Kem8ZPUA; rur="CCO\\05438741244537\\0541806249243:01fe5be8cca5dfdf790790343089535cf6e180c2b42a22dc64b9670d00694b9f2c28fd09"'
+});
 
-// =================================================================
-// 1. BAGIAN KODE SCRAPER
-// =================================================================
-
-const HEADERS = {
-	"Accept": "*/*",
-	"Accept-Language": "en-US,en;q=0.5",
-	"Content-Type": "application/x-www-form-urlencoded",
-	"X-FB-Friendly-Name": "PolarisPostActionLoadPostQueryQuery",
-	"X-CSRFToken": "RVDUooU5MYsBbS1CNN3CzVAuEP8oHB52",
-	"X-IG-App-ID": "1217981644879628",
-	"X-FB-LSD": "AVqbxe3J_YA",
-	"X-ASBD-ID": "129477",
-	"Sec-Fetch-Dest": "empty",
-	"Sec-Fetch-Mode": "cors",
-	"Sec-Fetch-Site": "same-origin",
-	"User-Agent": "Mozilla/5.0 (Linux; Android 11; SAMSUNG SM-G973U) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/14.2 Chrome/87.0.4280.141 Mobile Safari/537.36",
-};
-
-const getDownloadLinks = async (url) => {
-	try {
-		if (
-			!url.match(/(?:https?:\/\/(web\.|www\.|m\.)?(facebook|fb)\.(com|watch)\S+)?$/) &&
-			!url.match(/(https|http):\/\/www.instagram.com\/(p|reel|tv|stories)/gi)
-		) {
-			throw new Error("Invalid URL");
-		}
-
-		function decodeData(data) {
-			let [part1, part3, part4, part5, part6] = data;
-
-			function decodeSegment(segment, base, length) {
-				const charSet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ+/".split("");
-				let baseSet = charSet.slice(0, base);
-				let decodeSet = charSet.slice(0, length);
-
-				let decodedValue = segment
-					.split("")
-					.reverse()
-					.reduce((accum, char, index) => {
-						if (baseSet.indexOf(char) !== -1) {
-							return (accum += baseSet.indexOf(char) * Math.pow(base, index));
-						}
-						return accum;
-					}, 0);
-
-				let result = "";
-				while (decodedValue > 0) {
-					result = decodeSet[decodedValue % length] + result;
-					decodedValue = Math.floor(decodedValue / length);
-				}
-
-				return result || "0";
-			}
-
-			part6 = "";
-			for (let i = 0, len = part1.length; i < len; i++) {
-				let segment = "";
-				while (part1[i] !== part3[part5]) {
-					segment += part1[i];
-					i++;
-				}
-
-				for (let j = 0; j < part3.length; j++) {
-					segment = segment.replace(new RegExp(part3[j], "g"), j.toString());
-				}
-				part6 += String.fromCharCode(decodeSegment(segment, part5, 10) - part4);
-			}
-			return decodeURIComponent(encodeURIComponent(part6));
-		}
-
-		function extractParams(data) {
-			return data
-				.split("decodeURIComponent(escape(r))}(")[1]
-				.split("))")[0]
-				.split(",")
-				.map((item) => item.replace(/"/g, "").trim());
-		}
-
-		function extractDownloadUrl(data) {
-			return data
-				.split('getElementById("download-section").innerHTML = "')[1]
-				.split('"; document.getElementById("inputData").remove(); ')[0]
-				.replace(/\\(\\)?/g, "");
-		}
-
-		function getVideoUrl(data) {
-			return extractDownloadUrl(decodeData(extractParams(data)));
-		}
-
-		const formBody = new URLSearchParams();
-		formBody.append("url", url);
-
-		const response = await fetch("https://snapsave.app/action.php?lang=id", {
-			method: "POST",
-			headers: {
-				"accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-				"content-type": "application/x-www-form-urlencoded",
-				"origin": "https://snapsave.app",
-				"referer": "https://snapsave.app/id",
-				"user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.0.0 Safari/537.36",
-			},
-			body: formBody,
-		});
-
-		if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-		
-		const responseText = await response.text();
-		const videoPageContent = getVideoUrl(responseText);
-
-		const downloadLinks = [];
-		const hrefRegex = /<a[^>]+href=["']([^"']+)["'][^>]*>/gi;
-		let match;
-		
-		while ((match = hrefRegex.exec(videoPageContent)) !== null) {
-			let link = match[1];
-			link = link.replace(/&amp;/g, '&');
-			
-			if (!/https?:\/\//.test(link)) {
-				link = "https://snapsave.app" + link;
-			}
-			downloadLinks.push(link);
-		}
-
-		if (!downloadLinks.length) {
-			throw new Error("No data found");
-		}
-
-		return {
-			url: downloadLinks,
-			metadata: {
-				url: url,
-			},
-		};
-
-	} catch (error) {
-		throw new Error(error.stack);
-	}
-};
-
-function getInstagramPostId(url) {
-	const regex = /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|tv|stories|reel)\/([^/?#&]+).*/;
-	const match = url.match(regex);
-	return match ? match[1] : null;
-}
-
-function encodeGraphqlRequestData(shortcode) {
-	const requestData = {
-		av: "0",
-		__d: "www",
-		__user: "0",
-		__a: "1",
-		__req: "3",
-		__hs: "19624.HYP:instagram_web_pkg.2.1..0.0",
-		dpr: "3",
-		__ccg: "UNKNOWN",
-		__rev: "1008824440",
-		__s: "xf44ne:zhh75g:xr51e7",
-		__hsi: "7282217488877343271",
-		__dyn: "7xeUmwlEnwn8K2WnFw9-2i5U4e0yoW3q32360CEbo1nEhw2nVE4W0om78b87C0yE5ufz81s8hwGwQwoEcE7O2l0Fwqo31w9a9x-0z8-U2zxe2GewGwso88cobEaU2eUlwhEe87q7-0iK2S3qazo7u1xwIw8O321LwTwKG1pg661pwr86C1mwraCg",
-		__csr: "gZ3yFmJkillQvV6ybimnG8AmhqujGbLADgjyEOWz49z9XDlAXBJpC7Wy-vQTSvUGWGh5u8KibG44dBiigrgjDxGjU0150Q0848azk48N09C02IR0go4SaR70r8owyg9pU0V23hwiA0LQczA48S0f-x-27o05NG0fkw",
-		__comet_req: "7",
-		lsd: "AVqbxe3J_YA",
-		jazoest: "2957",
-		__spin_r: "1008824440",
-		__spin_b: "trunk",
-		__spin_t: "1695523385",
-		fb_api_caller_class: "RelayModern",
-		fb_api_req_friendly_name: "PolarisPostActionLoadPostQueryQuery",
-		variables: JSON.stringify({
-			shortcode: shortcode,
-			fetch_comment_count: null,
-			fetch_related_profile_media_count: null,
-			parent_comment_count: null,
-			child_comment_count: null,
-			fetch_like_count: null,
-			fetch_tagged_user_count: null,
-			fetch_preview_comment_count: null,
-			has_threaded_comments: false,
-			hoisted_comment_id: null,
-			hoisted_reply_id: null,
-		}),
-		server_timestamps: "true",
-		doc_id: "10015901848480474",
-	};
-
-	return new URLSearchParams(requestData).toString();
-}
-
-async function getPostGraphqlData(postId) {
-	try {
-		const encodedData = encodeGraphqlRequestData(postId);
-		const response = await fetch("https://www.instagram.com/api/graphql", {
-			method: "POST",
-			headers: HEADERS,
-			body: encodedData
-		});
-
-		if (!response.ok) throw new Error(`IG API Error: ${response.status}`);
-		
-		return await response.json();
-	} catch (error) {
-		throw new Error(error.stack);
-	}
-}
-
-function extractPostInfo(mediaData) {
-	try {
-		const getUrlFromData = (data) => {
-			if (data.edge_sidecar_to_children) {
-				return data.edge_sidecar_to_children.edges.map(
-					(edge) => edge.node.video_url || edge.node.display_url,
-				);
-			}
-			return data.video_url ? [data.video_url] : [data.display_url];
-		};
-
-		return {
-			url: getUrlFromData(mediaData),
-			metadata: {
-				caption: mediaData.edge_media_to_caption.edges[0]?.node.text || null,
-				username: mediaData.owner.username,
-				like: mediaData.edge_media_preview_like.count,
-				comment: mediaData.edge_media_to_comment.count,
-				isVideo: mediaData.is_video,
-			},
-		};
-	} catch (error) {
-		throw new Error(error.stack);
-	}
-}
-
-async function ig(url) {
-	const postId = getInstagramPostId(url);
-	if (!postId) {
-		throw new Error("Invalid Instagram URL");
-	}
-	const data = await getPostGraphqlData(postId);
-	const mediaData = data.data?.xdt_shortcode_media;
-	if (!mediaData) throw new Error("Media data not found in GraphQL response");
-	return extractPostInfo(mediaData);
-}
-
-// Main Function
-const igDownload = async (url) => {
-	let result = "";
-	try {
-		// Coba metode GraphQL dulu
-		result = await ig(url);
-	} catch {
-		try {
-			// Fallback ke SnapSave
-			result = await getDownloadLinks(url);
-		} catch (e) {
-			throw new Error(e.stack);
-		}
-	}
-	return result;
-};
-
-
-// =================================================================
-// 2. FUNGSI DOWNLOADER & HANDLER BOT (INTEGRASI)
-// =================================================================
-
-// Fungsi Download Stream (Wajib agar VPS aman & link tidak 403)
-async function downloadFile(url, outputLocation) {
-    const writer = fs.createWriteStream(outputLocation);
-    try {
-        const response = await axios({
-            url: url,
-            method: 'GET',
-            responseType: 'stream',
-            timeout: 60000,
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            }
-        });
-        response.data.pipe(writer);
-        return new Promise((resolve, reject) => {
-            writer.on('finish', () => resolve(true));
-            writer.on('error', reject);
-        });
-    } catch (error) {
-        if (fs.existsSync(outputLocation)) fs.unlinkSync(outputLocation);
-        throw error;
-    }
-}
-
-// Handler Baileys
-export default {
-    command: ['ig2'], // <-- Command diubah menjadi 'ig2' saja
-    execute: async (sock, m, { q, sender }) => {
-        if (!q) return sock.sendMessage(sender, { text: '❌ Linknya mana?' }, { quoted: m });
-
-        await sock.sendMessage(sender, { text: '⏳ Sedang memproses...' }, { quoted: m });
-
+/***
+  @ Base: https://www.instagram.com/
+  @ Scraper: Shannz (Updated)
+***/
+const instagram = {
+    // ---- BAGIAN REELS (VIDEO) ----
+    video: async (url) => {
+        if (!url) return { status: false, error: 'URL tidak valid atau kosong.' };
         try {
-            // A. Panggil Scraper
-            const result = await igDownload(q);
+            const response = await axios.get(url, { headers: getHeaders(), timeout: 10000 });
+            const $ = cheerio.load(response.data);
+            let item = null;
+            
+            $('script[type="application/json"]').each((_, el) => {
+                const content = $(el).html();
+                // Mencari di dua struktur (Foto/Reels)
+                if (content && (content.includes('xdt_api__v1__media__shortcode__web_info') || content.includes('xdt_shortcode_media'))) {
+                    try { 
+                        const scriptJson = JSON.parse(content); 
+                        const data = scriptJson.require?.[0]?.[3]?.[0]?.__bbox?.require?.[0]?.[3]?.[1]?.__bbox?.result?.data;
+                        if (data) {
+                            item = data.xdt_api__v1__media__shortcode__web_info?.items?.[0] || data.xdt_shortcode_media;
+                        }
+                    } catch (e) {}
+                }
+            });
 
-            if (!result || !result.url || result.url.length === 0) {
-                return sock.sendMessage(sender, { text: '❌ Gagal mendapatkan data.' }, { quoted: m });
-            }
+            if (!item) throw new Error('Data script tidak ditemukan (Mungkin IP Blocked atau struktur Reels berubah).');
+            
+            let videoTracks = [];
 
-            // B. Siapkan Folder Temp
-            const outputDir = path.join(__dirname, '../../temp_downloads');
-            if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
-
-            const captionText = `📸 *INSTAGRAM*\n\n👤 *User:* ${result.metadata?.username || '-'}\n📝 *Caption:* ${result.metadata?.caption || '-'}\n❤️ *Likes:* ${result.metadata?.like || '-'}`;
-
-            // C. Loop Download & Kirim
-            for (let i = 0; i < result.url.length; i++) {
-                const mediaUrl = result.url[i];
-                
-                // Deteksi tipe file manual jika metadata tidak lengkap
-                const isVideo = mediaUrl.includes('.mp4') || (result.metadata && result.metadata.isVideo);
-                const ext = isVideo ? 'mp4' : 'jpg';
-                
-                const fileName = `ig_${Date.now()}_${i}.${ext}`;
-                const filePath = path.join(outputDir, fileName);
-
-                try {
-                    // 1. Download File ke VPS
-                    await downloadFile(mediaUrl, filePath);
-
-                    // 2. Kirim ke WhatsApp
-                    if (isVideo) {
-                        await sock.sendMessage(sender, { 
-                            video: fs.readFileSync(filePath), 
-                            caption: i === 0 ? captionText : '' 
-                        }, { quoted: m });
-                    } else {
-                        await sock.sendMessage(sender, { 
-                            image: fs.readFileSync(filePath), 
-                            caption: i === 0 ? captionText : '' 
-                        }, { quoted: m });
-                    }
-
-                } catch (err) {
-                    console.error(`Gagal kirim file ke-${i}:`, err.message);
-                } finally {
-                    // 3. Hapus File Sampah
-                    if (fs.existsSync(filePath)) {
-                        fs.unlinkSync(filePath);
-                    }
+            // Cek format MP4 langsung (video_versions) terlebih dahulu
+            if (item.video_versions && item.video_versions.length > 0) {
+                videoTracks = item.video_versions.map(v => ({ url: v.url, bandwidth: v.width * v.height }));
+            } 
+            // Fallback ke DASH XML
+            else if (item.video_dash_manifest) {
+                const parser = new XMLParser({ ignoreAttributes: false });
+                const manifest = parser.parse(item.video_dash_manifest);
+                const period = manifest.MPD?.Period;
+                if (period) {
+                    const adaptationSets = Array.isArray(period.AdaptationSet) ? period.AdaptationSet : [period.AdaptationSet];
+                    adaptationSets.forEach((set) => {
+                        if (!set) return;
+                        if (set['@_contentType'] === 'video') {
+                            const representations = Array.isArray(set.Representation) ? set.Representation : [set.Representation];
+                            representations.forEach((rep) => {
+                                if (rep && rep.BaseURL) videoTracks.push({ url: rep.BaseURL, bandwidth: parseInt(rep['@_bandwidth']) || 0 });
+                            });
+                        }
+                    });
                 }
             }
 
-        } catch (error) {
-            console.error("Handler Error:", error);
-            sock.sendMessage(sender, { text: `❌ Gagal: ${error.message}` }, { quoted: m });
+            if (videoTracks.length === 0) throw new Error('URL Media Video tidak ditemukan di postingan ini.');
+            videoTracks.sort((a, b) => b.bandwidth - a.bandwidth);
+
+            return {
+                status: true,
+                result: {
+                    metadata: { caption: item.caption?.text || item.edge_media_to_caption?.edges?.[0]?.node?.text || '' },
+                    author: { username: item.user?.username || item.owner?.username || 'N/A', fullName: item.user?.full_name || item.owner?.full_name || '' },
+                    media: { videos: videoTracks }
+                }
+            };
+        } catch (error) { return { status: false, error: error.message }; }
+    },
+    
+    // ---- BAGIAN SLIDE (FOTO) ----
+    slide: async (url) => {
+        if (!url) return { status: false, error: 'URL tidak valid atau kosong.' };
+        try {
+            const response = await axios.get(url, { headers: getHeaders(), timeout: 10000 });
+            const $ = cheerio.load(response.data);
+            let scriptJson = null;
+            $('script[type="application/json"]').each((_, el) => {
+                const content = $(el).html();
+                if (content && content.includes('xdt_api__v1__media__shortcode__web_info')) {
+                    try { scriptJson = JSON.parse(content); } catch (e) {}
+                }
+            });
+            if (!scriptJson) throw new Error('Data script tidak ditemukan (Mungkin IP Blocked atau URL salah).');
+            const item = scriptJson.require?.[0]?.[3]?.[0]?.__bbox?.require?.[0]?.[3]?.[1]?.__bbox?.result?.data?.xdt_api__v1__media__shortcode__web_info?.items?.[0];
+            if (!item) throw new Error('Struct item tidak ditemukan dalam JSON.');
+            
+            let slides = [];
+            if (item.carousel_media && item.carousel_media.length > 0) {
+                slides = item.carousel_media.map((slideItem) => {
+                    return {
+                        images: (slideItem.image_versions2?.candidates || []).map(img => ({ url: img.url })),
+                        videos: slideItem.video_versions ? slideItem.video_versions.map(v => ({ url: v.url })) : []
+                    };
+                });
+            } else if (item.image_versions2 || item.video_versions) {
+                // Mendukung postingan slide tunggal (foto tunggal atau video tunggal di link /p/)
+                slides.push({
+                    images: (item.image_versions2?.candidates || []).map(img => ({ url: img.url })),
+                    videos: item.video_versions ? item.video_versions.map(v => ({ url: v.url })) : []
+                });
+            } else {
+                throw new Error('Tidak ada media gambar/slide yang ditemukan pada post ini.');
+            }
+            return {
+                status: true,
+                result: {
+                    metadata: { caption: item.caption?.text || '' },
+                    author: { username: item.user?.username || 'N/A', fullName: item.user?.full_name || '' },
+                    media: { slides: slides }
+                }
+            };
+        } catch (error) { return { status: false, error: error.message }; }
+    }
+};
+
+export default {
+    command: ['ig2'],
+    execute: async (sock, m, { sender }) => {
+        const chatId = m.key.remoteJid;
+        const fullText = m.message?.conversation || m.message?.extendedTextMessage?.text || m.text || '';
+        const urlMatch = fullText.match(/https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|stories|tv)\/[^\s]+/i);
+        const url = urlMatch ? urlMatch[0] : null;
+
+        if (!url) {
+            return sock.sendMessage(chatId, { 
+                text: `📸 *ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ᴠ2*\n\n` +
+                      `> \`.ig2 <url>\`\n\n` +
+                      `*ᴄᴏɴᴛᴏʜ:*\n` +
+                      `> \`.ig2 https://www.instagram.com/reel/xxx\`` 
+            }, { quoted: m });
+        }
+
+        await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
+
+        try {
+            let res;
+            let isReel = url.includes('/reel/') || url.includes('/tv/');
+
+            if (isReel) {
+                res = await instagram.video(url);
+            } else {
+                res = await instagram.slide(url);
+            }
+
+            if (!res.status) {
+                await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } });
+                return sock.sendMessage(chatId, { 
+                    text: `❌ *ɢᴀɢᴀʟ ᴍᴇɴɢᴀᴍʙɪʟ ᴅᴀᴛᴀ*\n\n> ${res.error}` 
+                }, { quoted: m });
+            }
+
+            const { metadata, author, media } = res.result;
+
+            const captionText = metadata.caption ? `\n\n📝 *Caption:*\n${metadata.caption}` : '';
+            
+            const caption =
+                `✅ *ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ ᴠ2*\n\n` +
+                `> 👤 @${author.username}` +
+                captionText +
+                `\n\nCreated By Faris Suka Mie Ayam🔥🚀`;
+
+            const getBuffer = async (mediaUrl) => {
+                const response = await axios.get(mediaUrl, { 
+                    responseType: 'arraybuffer',
+                    headers: { 'User-Agent': 'Mozilla/5.0' }
+                });
+                return Buffer.from(response.data, 'binary');
+            };
+
+            if (isReel) {
+                const videoUrl = media.videos[0]?.url;
+                if (!videoUrl) throw new Error('Video tidak ditemukan.');
+                
+                const vidBuffer = await getBuffer(videoUrl);
+                // Dihapus contextInfo
+                await sock.sendMessage(chatId, { 
+                    video: vidBuffer, 
+                    caption: caption 
+                }, { quoted: m });
+
+            } else {
+                const slides = media.slides;
+                if (!slides || slides.length === 0) throw new Error('Media tidak ditemukan.');
+
+                for (let i = 0; i < slides.length; i++) {
+                    const slide = slides[i];
+                    const sendCap = (i === 0) ? caption : ''; 
+
+                    // Dihapus contextInfo
+                    if (slide.videos && slide.videos.length > 0) {
+                        const vidBuffer = await getBuffer(slide.videos[0].url);
+                        await sock.sendMessage(chatId, { video: vidBuffer, caption: sendCap }, { quoted: m });
+                    } else if (slide.images && slide.images.length > 0) {
+                        const imgBuffer = await getBuffer(slide.images[0].url);
+                        await sock.sendMessage(chatId, { image: imgBuffer, caption: sendCap }, { quoted: m });
+                    }
+                    
+                    await new Promise(resolve => setTimeout(resolve, 1500));
+                }
+            }
+
+            await sock.sendMessage(chatId, { react: { text: '✅', key: m.key } });
+
+        } catch (err) {
+            await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } });
+            console.error('[ERROR IG2]:', err);
+            await sock.sendMessage(chatId, { 
+                text: `❌ *ᴛᴇʀᴊᴀᴅɪ ᴋᴇsᴀʟᴀʜᴀɴ sɪsᴛᴇᴍ*\n\n> ${err.message}` 
+            }, { quoted: m });
         }
     }
 };

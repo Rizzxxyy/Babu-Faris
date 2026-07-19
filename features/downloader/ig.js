@@ -1,15 +1,13 @@
 import * as config from '../../config.js';
-import { reelsvideo } from '../../src/scraper/reelsvideo.js';
+import { scrapeIG } from '../../src/scraper/igdl.js'; // Sesuaikan nama file scraper-nya
 
 export default {
     command: ['ig'],
     execute: async (sock, m, { sender }) => {
         const chatId = m.key.remoteJid;
         
-        // AMBIL TEKS: Mengambil pesan utuh dari struktur Baileys yang paling dalam
         const fullText = m.message?.conversation || m.message?.extendedTextMessage?.text || m.text || '';
 
-        // DETEKSI URL: Langsung cari link Instagram di dalam teks pesan menggunakan Regex
         const urlMatch = fullText.match(/https?:\/\/(www\.)?instagram\.com\/(p|reel|reels|stories|tv)\/[^\s]+/i);
         const url = urlMatch ? urlMatch[0] : null;
 
@@ -22,11 +20,11 @@ export default {
             }, { quoted: m });
         }
 
-        // Memberikan reaction ⏳ tanda sedang memproses
         await sock.sendMessage(chatId, { react: { text: '⏳', key: m.key } });
 
         try {
-            const result = await reelsvideo(url);
+            // Memanggil scraper Indown/Snapsave
+            const result = await scrapeIG(url);
 
             if (!result || result.type === 'unknown' || (!result.videos?.length && !result.images?.length)) {
                 await sock.sendMessage(chatId, { react: { text: '❌', key: m.key } });
@@ -35,7 +33,6 @@ export default {
                 }, { quoted: m });
             }
 
-            // Pengaturan Saluran (Channel) Forwarding
             const saluranId = config.saluran?.id || '120363208449943317@newsletter';
             const saluranName = config.saluran?.name || 'BOT ACUMALAKA';
             
@@ -55,16 +52,14 @@ export default {
                 carousel: '📸 Carousel'
             };
 
-            // Menambahkan teks Caption dari Instagram (jika ada)
             const captionText = result.caption ? `\n\n📝 *Caption:*\n${result.caption}` : '';
 
-            // Menggabungkan semua elemen menjadi pesan final
             const caption =
                 `✅ *ɪɴsᴛᴀɢʀᴀᴍ ᴅᴏᴡɴʟᴏᴀᴅᴇʀ*\n\n` +
                 `> ${typeLabel[result.type] || '📦 Media'}` +
                 (result.username ? `\n> 👤 @${result.username}` : '') +
                 captionText +
-                `\n\nCreated By Faris Suka Mie Ayam🔥🚀`;
+                `\n\n_Created By Faris Suka Mie Ayam_🔥🚀`;
 
             // Proses Pengiriman Media
             try {
@@ -81,7 +76,6 @@ export default {
                     }, { quoted: m });
                 } 
                 else {
-                    // Untuk Carousel (campuran foto dan video)
                     if (result.videos && result.videos.length > 0) {
                         await sock.sendMessage(chatId, { 
                             album: result.videos.map(vidUrl => ({ video: { url: vidUrl }, caption })),
@@ -98,7 +92,6 @@ export default {
             } catch (albumError) {
                 console.log("Fitur album gagal, mengirim media satu per satu...");
                 
-                // Fallback jika fitur album tidak disupport Baileys
                 if (result.videos && result.videos.length > 0) {
                     for (let vidUrl of result.videos) {
                         await sock.sendMessage(chatId, { video: { url: vidUrl }, caption, contextInfo: ctxInfo }, { quoted: m });
@@ -111,7 +104,6 @@ export default {
                 }
             }
 
-            // Memberikan reaction ✅ jika sukses
             await sock.sendMessage(chatId, { react: { text: '✅', key: m.key } });
 
         } catch (err) {

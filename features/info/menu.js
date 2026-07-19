@@ -46,35 +46,45 @@ Halo ${namaUser}! 👋
 📥 *D O W N L O A D E R*
 1.  *.ig* <link>
     (Instagram Video/Reel/Post)
-2.  *.tt* <link>
+2.  *.ig2* <link>
+    (Instagram Versi Backup)
+3.  *.tt* <link>
     (TikTok No Watermark)
-3.  *.mf* <link>
+4.  *.mediafire* / *.mf* <link>
     (MediaFire Downloader)
-4.  *.mp3* <link>
+5.  *.mp3* <link>
     (YouTube to MP3)
-5.  *.flac* <judul>
+6.  *.flac* <judul>
     (Download Lagu Hi-Res FLAC)
 
 🎨 *M E D I A  &  T O O L S*
-6.  *.sticker*
+7.  *.sticker*
     (Gambar/Video ➡️ Sticker)
+8.  *.brat* <teks>
+    (Buat Sticker Teks Brat)
+9.  *.upscale*
+    (Perjernih Foto/HD)
+10. *.removebg*
+    (Hapus Background Foto)
+11. *.upswgc*
+    (Upload SW Grup)   
 
 ⛩️ *A N I M E  &  M A N G A*
-7.  *.komiku* <judul>
+12. *.komiku* <judul>
     (Cari/Baca Manga Indo)
-8.  *.animexin* <judul>
+13. *.animexin* <judul>
     (Cari Anime Terbaru)
-9.  *.kusonime* <judul>
+14. *.kusonime* <judul>
     (Download Anime Batch)
-10. *.mal* <judul>
+15. *.mal* <judul>
     (Info Detail MyAnimeList)
 
 ⚙️ *S Y S T E M  &  O W N E R*
-11. *.ping*
+16. *.ping*
     (Cek Kecepatan Respon Bot)
-12. *.neofetch*
+17. *.neofetch*
     (Cek Info Spesifikasi VPS)
-13. *.setpp*
+18. *.setpp*
     (Ganti Foto Profil Bot)
 
 ────────────────────

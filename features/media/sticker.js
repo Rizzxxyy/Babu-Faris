@@ -33,7 +33,7 @@ export default {
         const mediaMessage = targetMsg[messageType];
         const isVideo = messageType === 'videoMessage' || (messageType === 'documentMessage' && mediaMessage.mimetype?.includes('video'));
 
-        // Batasi durasi GIF maks 15 detik agar RAM VPS 2GB Bos tidak nge-hang
+        // Batasi durasi GIF maks 15 detik agar RAM VPS tidak nge-hang
         if (isVideo && mediaMessage.seconds > 15) {
             return sock.sendMessage(chatId, { text: '❌ Durasi GIF/Video maksimal 15 detik!' }, { quoted: m });
         }
@@ -57,22 +57,21 @@ export default {
             }
             fs.writeFileSync(inputPath, buffer);
 
-            // 5. EKSEKUSI FFMPEG (Jurus Anti Kekecilan & Anti Blank)
-            // scale=512:512:force_original_aspect_ratio=decrease -> Skala pas ke ukuran stiker
-            // format=rgba -> Paksa output pakai warna asli (Memperbaiki GIF kosong)
-            // pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000 -> Tambah pinggiran transparan
+            // 5. EKSEKUSI FFMPEG (Auto Resolusi Mengikuti Foto Asli)
+            // scale=512:512:force_original_aspect_ratio=decrease -> Sisi terpanjang mentok 512px, sisi lainnya menyesuaikan proporsi
+            // format=rgba -> Paksa output pakai warna asli
             let ffmpegCmd = '';
             
             if (isVideo) {
-                ffmpegCmd = `ffmpeg -i "${inputPath}" -vcodec libwebp -filter_complex "[0:v] scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000,fps=15" -loop 0 -preset default -an -vsync 0 -t 00:00:10 "${outputPath}"`;
+                ffmpegCmd = `ffmpeg -i "${inputPath}" -vcodec libwebp -filter_complex "[0:v] scale=512:512:force_original_aspect_ratio=decrease,format=rgba,fps=15" -loop 0 -preset default -an -vsync 0 -t 00:00:10 "${outputPath}"`;
             } else {
-                ffmpegCmd = `ffmpeg -i "${inputPath}" -vcodec libwebp -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba,pad=512:512:(ow-iw)/2:(oh-ih)/2:color=#00000000" "${outputPath}"`;
+                ffmpegCmd = `ffmpeg -i "${inputPath}" -vcodec libwebp -vf "scale=512:512:force_original_aspect_ratio=decrease,format=rgba" "${outputPath}"`;
             }
 
             // Jalankan command
             await execPromise(ffmpegCmd);
 
-            // 6. Kirim Stiker ke WhatsApp (Gunakan method { url: path } agar RAM irit)
+            // 6. Kirim Stiker ke WhatsApp
             await sock.sendMessage(chatId, { sticker: { url: outputPath } }, { quoted: m });
 
         } catch (error) {
