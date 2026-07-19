@@ -60,8 +60,8 @@ pip3 install -U yt-dlp
 4. Clone Repository dari GitHub
 Tarik kode bot kamu ke dalam VPS:
 ```
-git clone https://github.com/Farisxx7/Bot-Acumalaka-.git
-cd Bot-Acumalaka-
+git clone https://github.com/Rizzxxyy/Babu-Faris.git
+cd Babu-Faris
 ```
 5. Install Module Node.js (Axios, Baileys, dll)
 Install semua *library* pendukung yang dibutuhkan agar bot bisa melakukan *scraping* dan terhubung ke WhatsApp. Jalankan perintah ini di terminal:
